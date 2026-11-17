@@ -37,6 +37,12 @@
           inherit zig;
           name = "rex4l-zig-dependencies";
         };
+
+        libc = pkgs.lib.getLib pkgs.stdenv.cc.libc;
+        libcSetup = ''
+          export REX4L_DYNAMIC_LINKER="${libc}/lib/ld-linux-x86-64.so.2"
+          export LD_LIBRARY_PATH="${libc}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        '';
       in
       {
         packages.default = pkgs.stdenv.mkDerivation {
@@ -51,7 +57,7 @@
           buildInputs = [ pkgs.gtk4 ];
           dontConfigure = true;
 
-          preBuild = ''
+          preBuild = libcSetup + ''
             export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache
             export ZIG_LOCAL_CACHE_DIR=$TMPDIR/zig-local-cache
             mkdir -p "$ZIG_GLOBAL_CACHE_DIR/p"
@@ -85,6 +91,8 @@
             ++ lib.optionals stdenv.hostPlatform.isLinux [
               gtk4
             ];
+
+          shellHook = libcSetup;
         };
       }
     );
