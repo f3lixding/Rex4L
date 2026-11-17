@@ -83,6 +83,23 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    // Generated Zig bindings; the modules link their system libraries via pkg-config.
+    const gobject = b.dependency("gobject", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const gtk_imports = .{
+        .{ "gtk", "gtk4" },
+        .{ "gdk", "gdk4" },
+        .{ "glib", "glib2" },
+        .{ "gio", "gio2" },
+        .{ "gobject", "gobject2" },
+    };
+    inline for (gtk_imports) |import| {
+        const name, const module = import;
+        exe.root_module.addImport(name, gobject.module(module));
+    }
+
     // This declares intent for the executable to be installed into the
     // install prefix when running `zig build` (i.e. when executing the default
     // step). By default the install prefix is `zig-out/` but can be overridden

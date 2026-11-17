@@ -31,6 +31,11 @@ pub fn main(init: std.process.Init) !void {
     try stdout_writer.flush(); // Don't forget to flush!
 }
 
+test "GTK bindings link against GTK4" {
+    const gtk = @import("gtk");
+    try std.testing.expectEqual(@as(c_uint, 4), gtk.getMajorVersion());
+}
+
 test "simple test" {
     const gpa = std.testing.allocator;
     var list: std.ArrayList(i32) = .empty;

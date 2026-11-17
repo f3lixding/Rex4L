@@ -70,7 +70,8 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
-        "zig-overlay": "zig-overlay"
+        "zig-overlay": "zig-overlay",
+        "zig2nix": "zig2nix"
       }
     },
     "systems": {
@@ -121,6 +122,29 @@
       "original": {
         "owner": "mitchellh",
         "repo": "zig-overlay",
+        "type": "github"
+      }
+    },
+    "zig2nix": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794899296,
+        "narHash": "sha256-4kAr0XkA7ooWuFSw+XWuM9nJUTHXNILVy0O3DFh1Pio=",
+        "owner": "Cloudef",
+        "repo": "zig2nix",
+        "rev": "de435cba4a0286f23b77ae5cc3aac264159843d2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Cloudef",
+        "repo": "zig2nix",
         "type": "github"
       }
     }
