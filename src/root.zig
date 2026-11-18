@@ -2,17 +2,29 @@
 const std = @import("std");
 const Io = std.Io;
 
-/// This is a documentation comment to explain the `printAnotherMessage` function below.
-///
-/// Accepting an `Io.Writer` instance is a handy way to write reusable code.
-pub fn printAnotherMessage(writer: *Io.Writer) Io.Writer.Error!void {
-    try writer.print("Run `zig build test` to run the tests.\n", .{});
-}
+const gtk = @import("gtk");
+const gio = @import("gio");
 
-pub fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
+pub fn testRender() void {
+    const app = gtk.Application.new(null, .{});
+    defer app.unref();
 
-test "basic add functionality" {
-    try std.testing.expect(add(3, 7) == 10);
+    _ = gio.Application.signals.activate.connect(
+        app,
+        ?*anyopaque,
+        struct {
+            pub fn activate(_app: *gtk.Application, _: ?*anyopaque) callconv(.c) void {
+                const window = gtk.ApplicationWindow.new(_app);
+                const base_window = window.as(gtk.Window);
+
+                base_window.setTitle("Rex4L");
+                base_window.setDefaultSize(800, 600);
+                base_window.present();
+            }
+        }.activate,
+        null,
+        .{},
+    );
+
+    _ = app.as(gio.Application).run(0, null);
 }

@@ -9,6 +9,8 @@ pub fn main(init: std.process.Init) !void {
 
     try stdout.interface.print("Hello, {s}\n", .{"felar"});
     try stdout.interface.flush();
+
+    Rex4L.testRender();
 }
 
 test "GTK bindings link against GTK4" {
