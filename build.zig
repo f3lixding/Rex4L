@@ -1,6 +1,8 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    const run_target = b.option([]const u8, "run-target", "target to run");
+
     var default_target: std.Target.Query = .{};
     // See flake for this ENV
     if (b.graph.environ_map.get("REX4L_DYNAMIC_LINKER")) |loader_path| {
@@ -11,6 +13,29 @@ pub fn build(b: *std.Build) void {
     });
 
     const optimize = b.standardOptimizeOption(.{});
+
+    if (run_target) |file_name| {
+        // For now we will assume this is only applicable to gtk_tutorials
+        var buf: [1024]u8 = undefined;
+        const entry_point_path = std.fmt.bufPrint(&buf, "src/gtk_tutorials/{s}.zig", .{file_name}) catch unreachable;
+
+        const exe = b.addExecutable(.{
+            .name = file_name,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(entry_point_path),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+        addGTKToModule(b, exe.root_module, .{ .target = target, .optimize = optimize });
+
+        const run_step = b.step("run", "Run the app");
+        const run_cmd = b.addRunArtifact(exe);
+        run_step.dependOn(&run_cmd.step);
+
+        return;
+    }
+
     const mod = b.addModule("Rex4L", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
