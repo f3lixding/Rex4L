@@ -71,6 +71,7 @@ fn addGTKToModule(b: *std.Build, mod: *std.Build.Module, opts: anytype) void {
     });
     const gtk_imports = .{
         .{ "gtk", "gtk4" },
+        .{ "cairo", "cairo1" },
         .{ "gdk", "gdk4" },
         .{ "glib", "glib2" },
         .{ "gio", "gio2" },
