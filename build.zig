@@ -14,27 +14,11 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    if (run_target) |file_name| {
-        // For now we will assume this is only applicable to gtk_tutorials
-        var buf: [1024]u8 = undefined;
-        const entry_point_path = std.fmt.bufPrint(&buf, "src/gtk_tutorials/{s}.zig", .{file_name}) catch unreachable;
-
-        const exe = b.addExecutable(.{
-            .name = file_name,
-            .root_module = b.createModule(.{
-                .root_source_file = b.path(entry_point_path),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-        addGTKToModule(b, exe.root_module, .{ .target = target, .optimize = optimize });
-
-        const run_step = b.step("run", "Run the app");
-        const run_cmd = b.addRunArtifact(exe);
-        run_step.dependOn(&run_cmd.step);
-
-        return;
-    }
+    const tutorial_run = registerTutorialTargets(
+        b,
+        run_target,
+        .{ .target = target, .optimize = optimize },
+    ) catch |err| std.debug.panic("could not register GTK tutorials: {s}", .{@errorName(err)});
 
     const mod = b.addModule("Rex4L", .{
         .root_source_file = b.path("src/root.zig"),
@@ -56,14 +40,15 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    const run_step = b.step("run", "Run the app");
-    const run_cmd = b.addRunArtifact(exe);
-    run_step.dependOn(&run_cmd.step);
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    // This allows the user to pass arguments to the application in the build
-    // command itself, like this: `zig build run -- arg1 arg2 etc`
-    run_cmd.addPassthruArgs();
+    const run_step = b.step("run", "Run the app or the selected GTK tutorial");
+    if (tutorial_run) |step| {
+        run_step.dependOn(step);
+    } else {
+        const run_cmd = b.addRunArtifact(exe);
+        run_step.dependOn(&run_cmd.step);
+        run_cmd.step.dependOn(b.getInstallStep());
+        run_cmd.addPassthruArgs();
+    }
 
     const mod_tests = b.addTest(.{
         .root_module = mod,
@@ -95,4 +80,46 @@ fn addGTKToModule(b: *std.Build, mod: *std.Build.Module, opts: anytype) void {
         const name, const module = import;
         mod.addImport(name, gobject.module(module));
     }
+}
+
+fn registerTutorialTargets(
+    b: *std.Build,
+    run_target: ?[]const u8,
+    opts: struct { optimize: std.builtin.Optimize, target: std.Build.ResolvedTarget },
+) !?*std.Build.Step {
+    const io = b.graph.io;
+    const tutorials_dir = "src/gtk_tutorials";
+    const dir = try b.root.openDir(io, tutorials_dir, .{ .iterate = true });
+    defer dir.close(io);
+
+    var walker = try dir.walk(b.allocator);
+    defer walker.deinit();
+
+    var selected: ?*std.Build.Step = null;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+
+        const name = b.dupe(std.fs.path.stem(entry.basename));
+        const exe = b.addExecutable(.{
+            .name = name,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(b.pathJoin(&.{ tutorials_dir, entry.path })),
+                .target = opts.target,
+                .optimize = opts.optimize,
+            }),
+        });
+        addGTKToModule(b, exe.root_module, .{ .target = opts.target, .optimize = opts.optimize });
+
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.addPassthruArgs();
+        const step = b.step(b.fmt("run-{s}", .{name}), b.fmt("Run the {s} GTK tutorial", .{name}));
+        step.dependOn(&run_cmd.step);
+
+        if (run_target) |requested| {
+            if (std.mem.eql(u8, requested, name)) selected = step;
+        }
+    }
+
+    return selected;
 }
