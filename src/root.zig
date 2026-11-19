@@ -1,4 +1,3 @@
-//! By convention, root.zig is the root source file when making a package.
 const std = @import("std");
 const Io = std.Io;
 
@@ -20,6 +19,23 @@ pub fn testRender() void {
                 base_window.setTitle("Rex4L");
                 base_window.setDefaultSize(800, 600);
                 base_window.present();
+
+                const button = gtk.Button.new();
+                button.setLabel("Hello this is a test button");
+                _ = gtk.Button.signals.clicked.connect(button, ?*anyopaque, struct {
+                    pub fn onClicked(_button: *gtk.Button, _: ?*anyopaque) callconv(.c) void {
+                        _button.setLabel("Clicked!");
+                    }
+                }.onClicked, null, .{});
+
+                const button_as_widget = button.as(gtk.Widget);
+
+                button_as_widget.setSizeRequest(140, 48);
+                button_as_widget.setHalign(.center);
+                button_as_widget.setValign(.center);
+                button_as_widget.setMarginTop(12);
+                button_as_widget.setMarginEnd(12);
+                base_window.setChild(button.as(gtk.Widget));
             }
         }.activate,
         null,
