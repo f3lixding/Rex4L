@@ -90,6 +90,7 @@ fn registerTutorialTargets(
 ) !?*std.Build.Step {
     const io = b.graph.io;
     const tutorials_dir = "src/gtk_tutorials";
+    b.dependOnDirectoryContents(b.path(tutorials_dir));
     const dir = try b.root.openDir(io, tutorials_dir, .{ .iterate = true });
     defer dir.close(io);
 
@@ -98,6 +99,10 @@ fn registerTutorialTargets(
 
     var selected: ?*std.Build.Step = null;
     while (try walker.next(io)) |entry| {
+        if (entry.kind == .directory) {
+            b.dependOnDirectoryContents(b.path(b.pathJoin(&.{ tutorials_dir, entry.path })));
+            continue;
+        }
         if (entry.kind != .file) continue;
         if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
 
