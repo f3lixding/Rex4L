@@ -13,10 +13,45 @@
 <main>
 <header>
   <div class="eyebrow">Rex4L / GTK tutorial / reference map</div>
-  <h1>Who calls what?</h1>
-  <p class="lead">Follow <code>zig build run-application -- README.md</code> from the terminal to the text on screen. The key is to separate <strong>who routes the request</strong>, <strong>who creates the window</strong>, and <strong>who puts the file in it</strong>.</p>
-  <nav aria-label="Sections"><a href="#layers">Libraries</a><a href="#launch">Launch paths</a><a href="#window">Window creation</a><a href="#file">File to screen</a><a href="#check">Check your understanding</a></nav>
+  <h1>Who calls classInit?</h1>
+  <p class="lead"><strong>Yes, on first construction it runs synchronously inside <code>ExampleAppWindow.new()</code>.</strong> Your <code>new()</code> calls native GObject through the bindings. GObject calls a binding-generated trampoline, which calls your <code>classInit</code>. There’s no event-loop dispatch in that chain.</p>
+  <nav aria-label="Sections"><a href="#trace">Exact init trace</a><a href="#layers">Libraries</a><a href="#launch">Launch paths</a><a href="#window">Class vs. instance</a><a href="#file">File to screen</a><a href="#menu">Menu and actions</a><a href="#check">Self-check</a></nav>
 </header>
+
+<section id="trace" aria-labelledby="trace-title">
+  <h2 id="trace-title">Follow the call stack</h2>
+  <p>Read indentation as “called by the line above it.” The two branches inside <code>newInstance</code> are sequential: <strong>registration returns before construction starts</strong>.</p>
+  <div class="card"><pre><code><span class="zig">ExampleAppWindow.new(app)                         [your Zig]</span>
+└─ newInstance(ExampleAppWindow, …)                [Zig binding]
+   ├─ 1. getGObjectType()                          [Zig binding]
+   │  └─ g_type_register_static(…, &amp;info, …)        [C: GObject]
+   │     Saves the init function pointers. Returns a type ID.
+   │     Does not call your classInit here.
+   │
+   └─ 2. g_object_new_with_properties(type ID, …)  [C: GObject]
+      ├─ g_type_class_ref → g_type_class_get       [C: GObject]
+      │  └─ type_class_init_Wm                     [if class not initialized]
+      │     └─ Calls the registered f_class_init    [C → Zig]
+      │        └─ Generated classInit trampoline   [Zig binding]
+      │           └─ <span class="zig">ExampleAppWindow.classInit</span>     [your Zig]
+      │              Saves the XML template + stack field offset.
+      │
+      └─ g_object_new_internal
+         └─ g_type_create_instance                 [C: GObject]
+            └─ Calls info.f_instance_init          [C → Zig]
+               └─ <span class="zig">ExampleAppWindow.instanceInit</span>   [your Zig]
+                  └─ gtk_widget_init_template      [C: GTK]
+                     Builds the children and fills window.stack.
+
+new() returns the initialized window. Your caller can now present it.</code></pre></div>
+  <p>The trace omits parent initializers and other GObject bookkeeping. On a second <code>new()</code>, the type ID and class already exist: there’s no registration or <code>classInit</code> again, but <code>instanceInit</code> still runs for the new window. If something else initialized the class earlier, even the first <code>new()</code> skips class setup.</p>
+  <details><summary>Where is the indirect call wired up?</summary><p>In the bindings’ <code>gobject2/ext.zig</code>, <code>defineClass</code> puts its generated trampoline in <code>f_class_init</code> and your window initializer in <code>f_instance_init</code>. The trampoline calls <code>userClassInit(class)</code>, where <code>userClassInit</code> is the callback you supplied as <code>.classInit = &amp;classInit</code>. Native GObject invokes the stored pointers; it doesn’t look up Zig function names.</p><p>Native source: <a href="https://github.com/GNOME/glib/blob/2.90.0/gobject/gobject.c#L2796">g_object_new_with_properties</a> · <a href="https://github.com/GNOME/glib/blob/2.90.0/gobject/gtype.c#L2230">class callback invocation</a> · <a href="https://github.com/GNOME/glib/blob/2.90.0/gobject/gtype.c#L1899">instance callback invocation</a>.</p></details>
+  <details><summary>Where does this happen relative to main() and run()?</summary><pre>main()
+├─ ExampleApp.new()             → ExampleApp.classInit installs activate/open
+└─ GApplication.run()
+   └─ activate() or open()       → your override runs in the primary instance
+      └─ ExampleAppWindow.new()  → runs the trace above, if a window is needed</pre><p>The application and the window have separate classes. The application’s class initializer runs before <code>run()</code> on first construction; the window’s runs later, when its class is first needed.</p></details>
+</section>
 
 <section id="layers" aria-labelledby="layers-title">
   <div class="eyebrow">01 / Responsibilities</div>
@@ -47,11 +82,7 @@
 <section id="window" aria-labelledby="window-title">
   <div class="eyebrow">03 / Object construction</div>
   <h2 id="window-title">One shared recipe, separate children for every window</h2>
-  <ol class="flow">
-    <li><div class="step zig"><span class="tag">Your code → Zig bindings</span><br><strong><code>ExampleAppWindow.new(app)</code> → <code>newInstance(...)</code></strong><p>The binding calls <code>getGObjectType()</code>. On its first call, that function registers the type, parent type, struct sizes and callback pointers. It returns the type ID used to ask GObject to create the window.</p></div></li>
-    <li><div class="step obj"><span class="tag">GObject → your callback / class setup</span><br><strong><code>classInit(class)</code> → <code>setTemplate(bytes)</code></strong><p>When GObject first initializes the window class, your callback gives GTK the XML recipe and registers a binding for the child named <code>stack</code>. No stack widget is created by this callback.</p></div></li>
-    <li><div class="step gtk"><span class="tag">GObject → your callback → GTK / each window</span><br><strong><code>instanceInit(window, …)</code> → <code>initTemplate()</code></strong><p>GTK applies the template to this particular window and creates its box, label and stack. It writes the stack widget’s pointer into this window’s <code>stack</code> field.</p></div></li>
-  </ol>
+  <p>These are two callbacks inside the <a href="#trace">construction trace</a>, not two functions that call each other. <code>classInit</code> configures the shared class; <code>instanceInit</code> populates the window now being created.</p>
   <div class="grid">
     <article class="card"><h3 class="xml">Two names, one binding</h3><p>In <code>bindTemplateChildFull("stack", 0, @offsetOf(ExampleAppWindow, "stack"))</code>, the first <code>"stack"</code> identifies the XML object. The second names the Zig field so the compiler can compute its byte offset. GTK gets the offset, not the Zig field name. <code>0</code> means not to expose the widget as a GtkBuilder internal child.</p></article>
     <article class="card"><h3 class="obj">Two structs, two jobs</h3><p>The <strong>class struct</strong> is shared and holds method slots. The <strong>instance struct</strong> holds one window’s state, including its own <code>stack</code> pointer. Each struct begins with its corresponding parent struct, letting GTK use the same address as the parent type.</p></article>
@@ -81,8 +112,35 @@ GtkTextView (read-only widget)</pre></article>
   <aside class="callout"><strong>Why not just read the file in <code>main</code>?</strong> You can, for a standalone viewer. This tutorial takes the longer route to show how GIO can deliver file-open requests to an already-running app and how a GTK template can initialize a custom window type.</aside>
 </section>
 
+<section id="menu" aria-labelledby="menu-title">
+  <div class="eyebrow">05 / Next tutorial: a menu</div>
+  <h2 id="menu-title">Who calls startup, and who calls Quit?</h2>
+  <p>This is the next tutorial step, not part of the current Zig source. There are <strong>three separate chains</strong>: startup registers the actions, window initialization builds the menu, and user input invokes an action later.</p>
+  <div class="card"><pre><code>main()
+├─ ExampleApp.new()
+│  └─ GObject → ExampleApp.classInit()       installs the startup override
+└─ GApplication.run()
+   └─ GIO registers this as the primary instance and emits startup
+      └─ ExampleApp.startup()                your override
+         ├─ Parent startup                 initializes GTK
+         ├─ Add "preferences" and "quit" to the app's action map
+         └─ Set Ctrl+Q → "app.quit"
+
+Later, a window is created:
+ExampleAppWindow.new()
+└─ GObject → ExampleAppWindow.instanceInit()
+   ├─ initTemplate()                        creates the GtkMenuButton
+   └─ GtkBuilder loads menu.ui → setMenuModel() attaches the menu
+
+Later, the user selects Quit or presses Ctrl+Q:
+GTK resolves "app.quit" → the app's "quit" action
+└─ GSimpleAction emits activate → your onQuit() → GApplication.quit()
+   The main loop exits and run() returns.</code></pre></div>
+  <aside class="callout"><strong>The bridge is the action name.</strong> The XML does not name a Zig function. <code>app.quit</code> means “look up <code>quit</code> in the application’s action map.” Both the menu item and the shortcut point there. This action’s <code>activate</code> signal is not the application’s <code>activate</code> callback.</aside>
+</section>
+
 <section id="check" aria-labelledby="check-title">
-  <div class="eyebrow">05 / Self-check</div>
+  <div class="eyebrow">06 / Self-check</div>
   <h2 id="check-title">Predict what happens, then check</h2>
   <details><summary>I launch with no filenames. Why is there no text?</summary><p>GIO calls <code>activate</code>, not <code>open</code>. GTK creates the stack from XML, but <code>openFile()</code> never adds a page.</p></details>
   <details><summary>I create a second window. Do the windows share a stack?</summary><p>No. They share one class template, but <code>instanceInit</code> makes a new stack for the second window. Each window’s <code>stack</code> field points to its own widget.</p></details>

@@ -14,12 +14,15 @@ const ExampleApp = extern struct {
     pub const Class = extern struct {
         pub const Instance = ExampleApp;
         parent_class: Parent.Class,
+
+        var parent: *Parent.Class = undefined;
     };
 
     // The Zig equivalent of G_DEFINE_TYPE for this subclass
     pub const getGObjectType = gobject.ext.defineClass(ExampleApp, .{
         .name = "ExampleApp",
         .classInit = &classInit,
+        .parent_class = &Class.parent,
     });
 
     fn new() *ExampleApp {
@@ -32,11 +35,44 @@ const ExampleApp = extern struct {
     fn classInit(class: *Class) callconv(.c) void {
         gio.Application.virtual_methods.activate.implement(class, &activate);
         gio.Application.virtual_methods.open.implement(class, &open);
+        gio.Application.virtual_methods.startup.implement(class, &startup);
     }
 
     fn activate(self: *ExampleApp) callconv(.c) void {
         const window = ExampleAppWindow.new(self);
         gobject.ext.as(gtk.Window, window).present();
+    }
+
+    fn startup(self: *ExampleApp) callconv(.c) void {
+        const app = gobject.ext.as(gtk.Application, self);
+
+        // We overrode startup, so explicitly run GTK's startup first
+        // kind of like calling super
+        gio.Application.virtual_methods.startup.call(Class.parent, app);
+
+        const actions = app.as(gio.ActionMap);
+
+        const preferences = gio.SimpleAction.new("preferences", null);
+        defer preferences.unref();
+        actions.addAction(preferences.as(gio.Action));
+
+        const quit = gio.SimpleAction.new("exit-app", null);
+        defer quit.unref();
+        _ = gio.SimpleAction.signals.activate.connect(
+            quit,
+            *ExampleApp,
+            onQuit,
+            self,
+            .{},
+        );
+        actions.addAction(quit.as(gio.Action));
+
+        const shortcuts = [_:null]?[*:0]const u8{"<Ctrl>q"};
+        app.setAccelsForAction("app.exit-app", &shortcuts);
+    }
+
+    fn onQuit(_: *gio.SimpleAction, _: ?*glib.Variant, self: *ExampleApp) callconv(.c) void {
+        gobject.ext.as(gio.Application, self).quit();
     }
 
     fn open(
@@ -65,6 +101,7 @@ const ExampleAppWindow = extern struct {
     pub const Parent = gtk.ApplicationWindow;
     parent_instance: Parent,
     stack: *gtk.Stack,
+    menu_button: *gtk.MenuButton,
 
     pub const Class = extern struct {
         pub const Instance = ExampleAppWindow;
@@ -86,10 +123,19 @@ const ExampleAppWindow = extern struct {
         const widget_class = gobject.ext.as(gtk.WidgetClass, class);
         widget_class.setTemplate(bytes);
         widget_class.bindTemplateChildFull("stack", 0, @offsetOf(ExampleAppWindow, "stack"));
+        widget_class.bindTemplateChildFull("menu_button", 0, @offsetOf(ExampleAppWindow, "menu_button"));
     }
 
     fn instanceInit(self: *ExampleAppWindow, _: *Class) callconv(.c) void {
         gobject.ext.as(gtk.Widget, self).initTemplate();
+
+        const ui = @embedFile("menu.ui");
+        const builder = gtk.Builder.newFromString(ui, ui.len);
+        defer builder.unref();
+
+        const object = builder.getObject("menu") orelse @panic("Missing menu");
+        const menu = gobject.ext.cast(gio.MenuModel, object) orelse @panic("Expected a menu model");
+        self.menu_button.setMenuModel(menu);
     }
 
     fn new(app: *ExampleApp) *ExampleAppWindow {

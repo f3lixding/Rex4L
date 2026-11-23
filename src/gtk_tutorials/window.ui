@@ -13,6 +13,12 @@
           </object>
         </child>
         <child>
+          <object class="GtkMenuButton" id="menu_button">
+            <property name="label">Menu</property>
+            <property name="halign">end</property>
+          </object>
+        </child>
+        <child>
           <object class="GtkStack" id="stack"/>
         </child>
       </object>
