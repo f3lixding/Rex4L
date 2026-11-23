@@ -64,6 +64,7 @@ const ExampleApp = extern struct {
 const ExampleAppWindow = extern struct {
     pub const Parent = gtk.ApplicationWindow;
     parent_instance: Parent,
+    stack: *gtk.Stack,
 
     pub const Class = extern struct {
         pub const Instance = ExampleAppWindow;
@@ -81,7 +82,10 @@ const ExampleAppWindow = extern struct {
         const bytes = glib.Bytes.newStatic(ui, ui.len);
         defer bytes.unref();
 
-        gobject.ext.as(gtk.WidgetClass, class).setTemplate(bytes);
+        // what the fuck is this
+        const widget_class = gobject.ext.as(gtk.WidgetClass, class);
+        widget_class.setTemplate(bytes);
+        widget_class.bindTemplateChildFull("stack", 0, @offsetOf(ExampleAppWindow, "stack"));
     }
 
     fn instanceInit(self: *ExampleAppWindow, _: *Class) callconv(.c) void {
@@ -94,8 +98,37 @@ const ExampleAppWindow = extern struct {
         });
     }
 
-    fn openFile(_: *ExampleAppWindow, _: *gio.File) void {
-        // Just like the C example, this is empty for now
+    fn openFile(self: *ExampleAppWindow, file: *gio.File) void {
+        const basename = file.getBasename() orelse return;
+        defer glib.free(basename);
+
+        var contents: [*]u8 = undefined;
+        var length: usize = 0;
+        if (file.loadContents(null, &contents, &length, null, null) == 0) {
+            std.debug.print("Could not read {s}\n", .{basename});
+            return;
+        }
+        defer glib.free(contents);
+
+        if (length > std.math.maxInt(c_int) or glib.utf8ValidateLen(contents, length, null) == 0) {
+            std.debug.print("Cannot displlay {s}: expected UTF-8 text that fits in the buffer\n", .{basename});
+            return;
+        }
+
+        const view = gtk.TextView.new();
+        view.setEditable(0);
+        view.setCursorVisible(0);
+        // GIO adds a zero terminator after the file contents.
+        view.getBuffer().setText(contents[0..length :0].ptr, @intCast(length));
+
+        const scrolled = gtk.ScrolledWindow.new();
+        const page = scrolled.as(gtk.Widget);
+        page.setHexpand(1);
+        page.setVexpand(1);
+        scrolled.setChild(view.as(gtk.Widget));
+
+        // Use the basename as the visible title, not as a unique page name.
+        _ = self.stack.addTitled(page, null, basename);
     }
 };
 
