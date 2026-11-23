@@ -5,6 +5,7 @@ const std = @import("std");
 const gtk = @import("gtk");
 const gio = @import("gio");
 const gobject = @import("gobject");
+const glib = @import("glib");
 
 const ExampleApp = extern struct {
     pub const Parent = gtk.Application;
@@ -71,7 +72,21 @@ const ExampleAppWindow = extern struct {
 
     pub const getGObjectType = gobject.ext.defineClass(ExampleAppWindow, .{
         .name = "ExampleAppWindow",
+        .classInit = &classInit,
+        .instanceInit = &instanceInit,
     });
+
+    fn classInit(class: *Class) callconv(.c) void {
+        const ui = @embedFile("window.ui");
+        const bytes = glib.Bytes.newStatic(ui, ui.len);
+        defer bytes.unref();
+
+        gobject.ext.as(gtk.WidgetClass, class).setTemplate(bytes);
+    }
+
+    fn instanceInit(self: *ExampleAppWindow, _: *Class) callconv(.c) void {
+        gobject.ext.as(gtk.Widget, self).initTemplate();
+    }
 
     fn new(app: *ExampleApp) *ExampleAppWindow {
         return gobject.ext.newInstance(ExampleAppWindow, .{
