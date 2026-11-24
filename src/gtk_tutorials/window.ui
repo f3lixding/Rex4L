@@ -29,7 +29,31 @@
           </object>
         </child>
         <child>
-          <object class="GtkStack" id="file_pages"/>
+          <object class="GtkBox">
+            <property name="orientation">horizontal</property>
+            <property name="vexpand">true</property>
+            <child>
+              <object class="GtkRevealer" id="word_sidebar">
+                <property name="transition-type">slide-right</property>
+                <child>
+                  <object class="GtkScrolledWindow">
+                    <property name="width-request">160</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <child>
+                      <object class="GtkListBox" id="word_rows">
+                        <property name="activate-on-single-click">true</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkStack" id="file_pages">
+                <property name="hexpand">true</property>
+              </object>
+            </child>
+          </object>
         </child>
       </object>
     </child>

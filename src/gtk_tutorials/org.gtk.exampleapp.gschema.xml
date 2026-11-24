@@ -8,6 +8,9 @@
       </choices>
       <default>'none'</default>
     </key>
+    <key name="show-words" type="b">
+      <default>true</default>
+    </key>
   </schema>
 </schemalist>
 

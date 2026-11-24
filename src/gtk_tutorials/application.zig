@@ -128,6 +128,8 @@ const ExampleAppWindow = extern struct {
     pages: *gtk.Stack,
     menu_button: *gtk.MenuButton,
     search_entry: *gtk.SearchEntry,
+    sidebar: *gtk.Revealer,
+    word_list: *gtk.ListBox,
 
     pub const Class = extern struct {
         pub const Instance = ExampleAppWindow;
@@ -150,6 +152,8 @@ const ExampleAppWindow = extern struct {
         widget_class.bindTemplateChildFull("file_pages", 0, @offsetOf(ExampleAppWindow, "pages"));
         widget_class.bindTemplateChildFull("menu_button", 0, @offsetOf(ExampleAppWindow, "menu_button"));
         widget_class.bindTemplateChildFull("file_search_entry", 0, @offsetOf(ExampleAppWindow, "search_entry"));
+        widget_class.bindTemplateChildFull("word_sidebar", 0, @offsetOf(ExampleAppWindow, "sidebar"));
+        widget_class.bindTemplateChildFull("word_rows", 0, @offsetOf(ExampleAppWindow, "word_list"));
     }
 
     fn instanceInit(self: *ExampleAppWindow, _: *Class) callconv(.c) void {
@@ -159,6 +163,18 @@ const ExampleAppWindow = extern struct {
         defer settings.unref();
 
         settings.bind("transition", self.pages.as(gobject.Object), "transition-type", .{ .get = true });
+        // Menu → Words toggles the saved show-words setting. Copy that value
+        // into the sidebar's reveal-child property to show or hide the word list.
+        settings.bind("show-words", self.sidebar.as(gobject.Object), "reveal-child", .{ .get = true });
+
+        const action = settings.createAction("show-words");
+        defer action.as(gobject.Object).unref();
+
+        const window = gobject.ext.as(gtk.ApplicationWindow, self);
+        window.as(gio.ActionMap).addAction(action);
+
+        _ = gobject.Object.signals.notify.connect(self.pages, *ExampleAppWindow, onVisibleFileChanged, self, .{ .detail = "visible-child" });
+        _ = gtk.ListBox.signals.row_activated.connect(self.word_list, *ExampleAppWindow, onWordClicked, self, .{});
 
         const ui = @embedFile("menu.ui");
         const builder = gtk.Builder.newFromString(ui, ui.len);
@@ -175,6 +191,53 @@ const ExampleAppWindow = extern struct {
         return gobject.ext.newInstance(ExampleAppWindow, .{
             .application = gobject.ext.as(gtk.Application, app),
         });
+    }
+
+    fn visibleFileView(self: *ExampleAppWindow) ?*gtk.TextView {
+        const page = self.pages.getVisibleChild() orelse return null;
+        const scrolled = gobject.ext.cast(gtk.ScrolledWindow, page) orelse return null;
+        const child = scrolled.getChild() orelse return null;
+        return gobject.ext.cast(gtk.TextView, child);
+    }
+
+    fn onVisibleFileChanged(_: *gtk.Stack, _: *gobject.ParamSpec, self: *ExampleAppWindow) callconv(.c) void {
+        self.word_list.removeAll();
+
+        const view = self.visibleFileView() orelse return;
+        const buffer = view.getBuffer();
+        var start: gtk.TextIter = undefined;
+        var end: gtk.TextIter = undefined;
+        buffer.getBounds(&start, &end);
+
+        const text = buffer.getText(&start, &end, 1);
+        defer glib.free(text);
+
+        const alloc = std.heap.page_allocator;
+        var seen = std.StringHashMap(void).init(alloc);
+        defer seen.deinit();
+
+        // Simple word splitting for the tutorial, not language-aware.
+        var words = std.mem.tokenizeAny(u8, std.mem.span(text), "\t\r\n.,;:!?()[]{}\"");
+        while (words.next()) |word| {
+            const result = seen.getOrPut(word) catch return;
+            if (result.found_existing) continue;
+
+            const label_text = alloc.dupeSentinel(u8, word, 0) catch return;
+            defer alloc.free(label_text);
+
+            const label = gtk.Label.new(label_text.ptr);
+            // Make the clickable row explicit. GTK otherwise wraps the label in a row for us.
+            const row = gtk.ListBoxRow.new();
+            row.setChild(label.as(gtk.Widget));
+            self.word_list.append(row.as(gtk.Widget));
+        }
+    }
+
+    fn onWordClicked(_: *gtk.ListBox, row: *gtk.ListBoxRow, self: *ExampleAppWindow) callconv(.c) void {
+        // GTK passes the activated row, not the label we put inside it.
+        const row_content = row.getChild() orelse return;
+        const label = gobject.ext.cast(gtk.Label, row_content) orelse return;
+        self.search_entry.as(gtk.Editable).setText(label.getText());
     }
 
     fn openFile(self: *ExampleAppWindow, file: *gio.File) void {
@@ -214,6 +277,7 @@ const ExampleAppWindow = extern struct {
         const query = entry.as(gtk.Editable).getText();
         if (query[0] == 0) return;
 
+        // Not entirely sure what is going on here
         const page = self.pages.getVisibleChild() orelse return;
         const scrolled = gobject.ext.cast(gtk.ScrolledWindow, page) orelse return;
         const child = scrolled.getChild() orelse return;

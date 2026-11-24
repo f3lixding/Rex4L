@@ -5,6 +5,10 @@
         <attribute name="label">Preferences</attribute>
         <attribute name="action">app.preferences</attribute>
       </item>
+      <item>
+        <attribute name="label">Words</attribute>
+        <attribute name="action">win.show-words</attribute>
+      </item>
     </section>
     <section>
       <item>
