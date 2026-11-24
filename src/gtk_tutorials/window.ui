@@ -19,7 +19,12 @@
           </object>
         </child>
         <child>
-          <object class="GtkStack" id="stack"/>
+          <object class="GtkStackSwitcher">
+            <property name="stack">file_pages</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkStack" id="file_pages"/>
         </child>
       </object>
     </child>

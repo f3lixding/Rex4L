@@ -54,6 +54,8 @@ const ExampleApp = extern struct {
 
         const preferences = gio.SimpleAction.new("preferences", null);
         defer preferences.unref();
+
+        _ = gio.SimpleAction.signals.activate.connect(preferences, *ExampleApp, onPreferences, self, .{});
         actions.addAction(preferences.as(gio.Action));
 
         const quit = gio.SimpleAction.new("exit-app", null);
@@ -69,6 +71,29 @@ const ExampleApp = extern struct {
 
         const shortcuts = [_:null]?[*:0]const u8{"<Ctrl>q"};
         app.setAccelsForAction("app.exit-app", &shortcuts);
+    }
+
+    fn onPreferences(_: *gio.SimpleAction, _: ?*glib.Variant, self: *ExampleApp) callconv(.c) void {
+        const app = gobject.ext.as(gtk.Application, self);
+        const parent = app.getActiveWindow() orelse return;
+
+        const prefs = gtk.Window.new();
+        prefs.setTitle("Preferences");
+        prefs.setTransientFor(parent);
+        prefs.setDestroyWithParent(1);
+        prefs.setModal(1);
+
+        const choices = gtk.ComboBoxText.new();
+        choices.append("none", "None");
+        choices.append("crossfade", "Fade");
+        choices.append("slide-left-right", "Slide");
+        prefs.setChild(choices.as(gtk.Widget));
+
+        const settings = gio.Settings.new("org.gtk.exampleapp");
+        defer settings.unref();
+        settings.bind("transition", choices.as(gobject.Object), "active-id", .{});
+
+        prefs.present();
     }
 
     fn onQuit(_: *gio.SimpleAction, _: ?*glib.Variant, self: *ExampleApp) callconv(.c) void {
@@ -100,7 +125,7 @@ const ExampleApp = extern struct {
 const ExampleAppWindow = extern struct {
     pub const Parent = gtk.ApplicationWindow;
     parent_instance: Parent,
-    stack: *gtk.Stack,
+    pages: *gtk.Stack,
     menu_button: *gtk.MenuButton,
 
     pub const Class = extern struct {
@@ -119,15 +144,19 @@ const ExampleAppWindow = extern struct {
         const bytes = glib.Bytes.newStatic(ui, ui.len);
         defer bytes.unref();
 
-        // what the fuck is this
         const widget_class = gobject.ext.as(gtk.WidgetClass, class);
         widget_class.setTemplate(bytes);
-        widget_class.bindTemplateChildFull("stack", 0, @offsetOf(ExampleAppWindow, "stack"));
+        widget_class.bindTemplateChildFull("file_pages", 0, @offsetOf(ExampleAppWindow, "pages"));
         widget_class.bindTemplateChildFull("menu_button", 0, @offsetOf(ExampleAppWindow, "menu_button"));
     }
 
     fn instanceInit(self: *ExampleAppWindow, _: *Class) callconv(.c) void {
         gobject.ext.as(gtk.Widget, self).initTemplate();
+
+        const settings = gio.Settings.new("org.gtk.exampleapp");
+        defer settings.unref();
+
+        settings.bind("transition", self.pages.as(gobject.Object), "transition-type", .{ .get = true });
 
         const ui = @embedFile("menu.ui");
         const builder = gtk.Builder.newFromString(ui, ui.len);
@@ -174,7 +203,7 @@ const ExampleAppWindow = extern struct {
         scrolled.setChild(view.as(gtk.Widget));
 
         // Use the basename as the visible title, not as a unique page name.
-        _ = self.stack.addTitled(page, null, basename);
+        _ = self.pages.addTitled(page, null, basename);
     }
 };
 

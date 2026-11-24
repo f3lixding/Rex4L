@@ -34,14 +34,14 @@
       │     └─ Calls the registered f_class_init    [C → Zig]
       │        └─ Generated classInit trampoline   [Zig binding]
       │           └─ <span class="zig">ExampleAppWindow.classInit</span>     [your Zig]
-      │              Saves the XML template + stack field offset.
+      │              Saves the XML template + pages field offset.
       │
       └─ g_object_new_internal
          └─ g_type_create_instance                 [C: GObject]
             └─ Calls info.f_instance_init          [C → Zig]
                └─ <span class="zig">ExampleAppWindow.instanceInit</span>   [your Zig]
                   └─ gtk_widget_init_template      [C: GTK]
-                     Builds the children and fills window.stack.
+                     Builds the children and fills window.pages.
 
 new() returns the initialized window. Your caller can now present it.</code></pre></div>
   <p>The trace omits parent initializers and other GObject bookkeeping. On a second <code>new()</code>, the type ID and class already exist: there’s no registration or <code>classInit</code> again, but <code>instanceInit</code> still runs for the new window. If something else initialized the class earlier, even the first <code>new()</code> skips class setup.</p>
@@ -84,8 +84,8 @@ new() returns the initialized window. Your caller can now present it.</code></pr
   <h2 id="window-title">One shared recipe, separate children for every window</h2>
   <p>These are two callbacks inside the <a href="#trace">construction trace</a>, not two functions that call each other. <code>classInit</code> configures the shared class; <code>instanceInit</code> populates the window now being created.</p>
   <div class="grid">
-    <article class="card"><h3 class="xml">Two names, one binding</h3><p>In <code>bindTemplateChildFull("stack", 0, @offsetOf(ExampleAppWindow, "stack"))</code>, the first <code>"stack"</code> identifies the XML object. The second names the Zig field so the compiler can compute its byte offset. GTK gets the offset, not the Zig field name. <code>0</code> means not to expose the widget as a GtkBuilder internal child.</p></article>
-    <article class="card"><h3 class="obj">Two structs, two jobs</h3><p>The <strong>class struct</strong> is shared and holds method slots. The <strong>instance struct</strong> holds one window’s state, including its own <code>stack</code> pointer. Each struct begins with its corresponding parent struct, letting GTK use the same address as the parent type.</p></article>
+    <article class="card"><h3 class="xml">Three distinct names</h3><p><code>stack</code> is the GTK property on the switcher. <code>file_pages</code> is the XML ID of the widget it controls. In <code>bindTemplateChildFull("file_pages", 0, @offsetOf(ExampleAppWindow, "pages"))</code>, <code>pages</code> is the Zig field that stores the pointer to that widget. GTK gets the offset, not the Zig field name. <code>0</code> means not to expose the widget as a GtkBuilder internal child.</p></article>
+    <article class="card"><h3 class="obj">Two structs, two jobs</h3><p>The <strong>class struct</strong> is shared and holds method slots. The <strong>instance struct</strong> holds one window’s state, including its own <code>pages</code> pointer. Each struct begins with its corresponding parent struct, letting GTK use the same address as the parent type.</p></article>
   </div>
   <aside class="callout"><strong>Separate class initializers:</strong> <code>ExampleApp.classInit</code> installs the <code>activate</code> and <code>open</code> overrides. <code>ExampleAppWindow.classInit</code> installs the window template. Same kind of callback, different types and different jobs.</aside>
 </section>
@@ -104,11 +104,11 @@ GtkTextView (read-only widget)</pre></article>
     <article class="card"><h3 class="gtk">Widget tree after opening a file</h3><pre class="tree">ExampleAppWindow
 └─ GtkBox
    ├─ GtkLabel  “Loaded from window.ui”
-   └─ GtkStack  (id="stack")
+   └─ GtkStack  (id="file_pages")
       └─ GtkScrolledWindow  (one per file)
          └─ GtkTextView</pre><p class="muted">The template makes everything through the stack. <code>openFile()</code> creates each scrolled window and text view.</p></article>
   </div>
-  <p><code>stack.addTitled()</code> adds a page and gives it a title. <code>GtkStack</code> displays one page at a time but doesn’t provide tabs. A <code>GtkStackSwitcher</code> tied to that stack supplies the buttons; it’s not in the current tutorial XML. There’s no file picker in this example, either.</p>
+  <p><code>self.pages.addTitled()</code> adds a page and gives it a title. <code>GtkStack</code> displays one page at a time. The <code>GtkStackSwitcher</code> supplies the tab buttons because its <code>stack</code> property points to <code>file_pages</code>. There’s no file picker in this example, either.</p>
   <aside class="callout"><strong>Why not just read the file in <code>main</code>?</strong> You can, for a standalone viewer. This tutorial takes the longer route to show how GIO can deliver file-open requests to an already-running app and how a GTK template can initialize a custom window type.</aside>
 </section>
 
@@ -143,8 +143,8 @@ GTK resolves "app.quit" → the app's "quit" action
   <div class="eyebrow">06 / Self-check</div>
   <h2 id="check-title">Predict what happens, then check</h2>
   <details><summary>I launch with no filenames. Why is there no text?</summary><p>GIO calls <code>activate</code>, not <code>open</code>. GTK creates the stack from XML, but <code>openFile()</code> never adds a page.</p></details>
-  <details><summary>I create a second window. Do the windows share a stack?</summary><p>No. They share one class template, but <code>instanceInit</code> makes a new stack for the second window. Each window’s <code>stack</code> field points to its own widget.</p></details>
-  <details><summary>What if I set the template but never call initTemplate()?</summary><p>The class has the recipe, but your window never builds the XML children. Binding <code>stack</code> does not create a stack by itself.</p></details>
+  <details><summary>I create a second window. Do the windows share a stack?</summary><p>No. They share one class template, but <code>instanceInit</code> makes a new stack for the second window. Each window’s <code>pages</code> field points to its own widget.</p></details>
+  <details><summary>What if I set the template but never call initTemplate()?</summary><p>The class has the recipe, but your window never builds the XML children. Binding <code>file_pages</code> does not create a stack by itself.</p></details>
   <details><summary>Is the Zig binding calling my open function?</summary><p>GIO dispatches the request. The binding helped put the address of your function in the class’s virtual method slot; GIO calls it at runtime.</p></details>
 </section>
 

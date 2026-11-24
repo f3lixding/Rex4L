@@ -1,0 +1,13 @@
+<schemalist>
+  <schema id="org.gtk.exampleapp" path="/org/gtk/exampleapp/">
+    <key name="transition" type="s">
+      <choices>
+        <choice value="none"/>
+        <choice value="crossfade"/>
+        <choice value="slide-left-right"/>
+      </choices>
+      <default>'none'</default>
+    </key>
+  </schema>
+</schemalist>
+
