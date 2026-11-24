@@ -18,6 +18,11 @@
             <property name="halign">end</property>
           </object>
         </child>
+        <child> 
+          <object class="GtkSearchEntry" id="file_search_entry">
+            <property name="placeholder-text">Search this file...</property>
+          </object>
+        </child>
         <child>
           <object class="GtkStackSwitcher">
             <property name="stack">file_pages</property>

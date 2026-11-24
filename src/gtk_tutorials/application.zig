@@ -127,6 +127,7 @@ const ExampleAppWindow = extern struct {
     parent_instance: Parent,
     pages: *gtk.Stack,
     menu_button: *gtk.MenuButton,
+    search_entry: *gtk.SearchEntry,
 
     pub const Class = extern struct {
         pub const Instance = ExampleAppWindow;
@@ -148,6 +149,7 @@ const ExampleAppWindow = extern struct {
         widget_class.setTemplate(bytes);
         widget_class.bindTemplateChildFull("file_pages", 0, @offsetOf(ExampleAppWindow, "pages"));
         widget_class.bindTemplateChildFull("menu_button", 0, @offsetOf(ExampleAppWindow, "menu_button"));
+        widget_class.bindTemplateChildFull("file_search_entry", 0, @offsetOf(ExampleAppWindow, "search_entry"));
     }
 
     fn instanceInit(self: *ExampleAppWindow, _: *Class) callconv(.c) void {
@@ -162,9 +164,11 @@ const ExampleAppWindow = extern struct {
         const builder = gtk.Builder.newFromString(ui, ui.len);
         defer builder.unref();
 
-        const object = builder.getObject("menu") orelse @panic("Missing menu");
-        const menu = gobject.ext.cast(gio.MenuModel, object) orelse @panic("Expected a menu model");
+        const menu_object = builder.getObject("menu") orelse @panic("Missing menu");
+        const menu = gobject.ext.cast(gio.MenuModel, menu_object) orelse @panic("Expected a menu model");
         self.menu_button.setMenuModel(menu);
+
+        _ = gtk.SearchEntry.signals.search_changed.connect(self.search_entry, *ExampleAppWindow, onSearch, self, .{});
     }
 
     fn new(app: *ExampleApp) *ExampleAppWindow {
@@ -204,6 +208,36 @@ const ExampleAppWindow = extern struct {
 
         // Use the basename as the visible title, not as a unique page name.
         _ = self.pages.addTitled(page, null, basename);
+    }
+
+    fn onSearch(entry: *gtk.SearchEntry, self: *ExampleAppWindow) callconv(.c) void {
+        const query = entry.as(gtk.Editable).getText();
+        if (query[0] == 0) return;
+
+        const page = self.pages.getVisibleChild() orelse return;
+        const scrolled = gobject.ext.cast(gtk.ScrolledWindow, page) orelse return;
+        const child = scrolled.getChild() orelse return;
+        const view = gobject.ext.cast(gtk.TextView, child) orelse return;
+        const buffer = view.getBuffer();
+
+        var start: gtk.TextIter = undefined;
+        buffer.getStartIter(&start);
+
+        var match_start: gtk.TextIter = undefined;
+        var match_end: gtk.TextIter = undefined;
+        if (start.forwardSearch(
+            query,
+            .{ .case_insensitive = true },
+            &match_start,
+            &match_end,
+            null,
+        ) == 0) {
+            buffer.selectRange(&start, &start); // clear the existing highlight
+            return;
+        }
+
+        buffer.selectRange(&match_start, &match_end);
+        _ = view.scrollToIter(&match_start, 0, 0, 0, 0);
     }
 };
 
