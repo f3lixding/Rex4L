@@ -9,6 +9,10 @@
         <attribute name="label">Words</attribute>
         <attribute name="action">win.show-words</attribute>
       </item>
+      <item>
+        <attribute name="label">Lines</attribute>
+        <attribute name="action">win.show-lines</attribute>
+      </item>
     </section>
     <section>
       <item>

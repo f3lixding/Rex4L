@@ -24,6 +24,21 @@
           </object>
         </child>
         <child>
+      <object class="GtkBox">
+        <property name="spacing">6</property>
+          <child>
+            <object class="GtkLabel" id="line_count_caption">
+              <property name="label">Lines:</property>
+            </object>
+          </child>
+          <child>
+            <object class="GtkLabel" id="line_count_value">
+              <property name="label">—</property>
+            </object>
+          </child>
+          </object>
+        </child>
+        <child>
           <object class="GtkStackSwitcher">
             <property name="stack">file_pages</property>
           </object>

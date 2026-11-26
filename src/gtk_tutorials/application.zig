@@ -130,6 +130,8 @@ const ExampleAppWindow = extern struct {
     search_entry: *gtk.SearchEntry,
     sidebar: *gtk.Revealer,
     word_list: *gtk.ListBox,
+    line_caption: *gtk.Label,
+    line_value: *gtk.Label,
 
     pub const Class = extern struct {
         pub const Instance = ExampleAppWindow;
@@ -154,6 +156,8 @@ const ExampleAppWindow = extern struct {
         widget_class.bindTemplateChildFull("file_search_entry", 0, @offsetOf(ExampleAppWindow, "search_entry"));
         widget_class.bindTemplateChildFull("word_sidebar", 0, @offsetOf(ExampleAppWindow, "sidebar"));
         widget_class.bindTemplateChildFull("word_rows", 0, @offsetOf(ExampleAppWindow, "word_list"));
+        widget_class.bindTemplateChildFull("line_count_caption", 0, @offsetOf(ExampleAppWindow, "line_caption"));
+        widget_class.bindTemplateChildFull("line_count_value", 0, @offsetOf(ExampleAppWindow, "line_value"));
     }
 
     fn instanceInit(self: *ExampleAppWindow, _: *Class) callconv(.c) void {
@@ -176,6 +180,17 @@ const ExampleAppWindow = extern struct {
         _ = gobject.Object.signals.notify.connect(self.pages, *ExampleAppWindow, onVisibleFileChanged, self, .{ .detail = "visible-child" });
         _ = gtk.ListBox.signals.row_activated.connect(self.word_list, *ExampleAppWindow, onWordClicked, self, .{});
 
+        // line numbers
+        const value = self.line_value.as(gobject.Object);
+        const caption = self.line_caption.as(gobject.Object);
+
+        const show_lines = gio.PropertyAction.new("show-lines", value, "visible");
+        defer show_lines.as(gobject.Object).unref();
+
+        window.as(gio.ActionMap).addAction(show_lines.as(gio.Action));
+        _ = value.bindProperty("visible", caption, "visible", .{ .sync_create = true });
+
+        // menu
         const ui = @embedFile("menu.ui");
         const builder = gtk.Builder.newFromString(ui, ui.len);
         defer builder.unref();
@@ -203,8 +218,16 @@ const ExampleAppWindow = extern struct {
     fn onVisibleFileChanged(_: *gtk.Stack, _: *gobject.ParamSpec, self: *ExampleAppWindow) callconv(.c) void {
         self.word_list.removeAll();
 
-        const view = self.visibleFileView() orelse return;
+        const view = self.visibleFileView() orelse {
+            self.line_value.setText("-");
+            return;
+        };
         const buffer = view.getBuffer();
+
+        var scratch: [32]u8 = undefined;
+        const count_text = std.mem.printSentinel(&scratch, "{d}", .{buffer.getLineCount()}, 0) catch unreachable;
+        self.line_value.setText(count_text.ptr);
+
         var start: gtk.TextIter = undefined;
         var end: gtk.TextIter = undefined;
         buffer.getBounds(&start, &end);
