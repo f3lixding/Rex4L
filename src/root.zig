@@ -1,5 +1,5 @@
-const std = @import("std");
-const Io = std.Io;
+const ui = @import("ui/root.zig");
 
-const gtk = @import("gtk");
-const gio = @import("gio");
+pub fn run() void {
+    ui.run();
+}

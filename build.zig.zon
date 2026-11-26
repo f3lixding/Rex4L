@@ -36,6 +36,10 @@
             .url = "https://deps.files.ghostty.org/gobject-2026-10-02-38-1.tar.zst",
             .hash = "gobject-0.3.2-Skun7LuIogBbEh-6WrLeEzMaRCnOMB3eOf__RaPYSMCZ",
         },
+        .ghostty = .{
+            .url = "git+https://github.com/ghostty-org/ghostty.git?ref=vt-1.0.2#573c4a21e02311ae87844af26b6a7a179f82858e",
+            .hash = "ghostty-1.4.1-dev-5UdBCxbdqAWvTbEDu8LHIX61u3JHpYit3s8zjCphO4mh",
+        },
     },
     .paths = .{
         "build.zig",
