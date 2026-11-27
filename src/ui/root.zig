@@ -2,6 +2,7 @@ const gio = @import("gio");
 const gtk = @import("gtk");
 
 const app_window = @import("application_window.zig");
+const TerminalView = @import("TerminalView.zig");
 
 pub fn run() void {
     const app = gtk.Application.new("com.github.f3lixding.Rex4L", .{});

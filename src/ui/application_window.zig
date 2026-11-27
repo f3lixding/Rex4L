@@ -1,5 +1,8 @@
+const std = @import("std");
 const gtk = @import("gtk");
 const gobject = @import("gobject");
+const vt = @import("ghostty-vt");
+const TerminalView = @import("TerminalView.zig");
 
 pub const MainWindow = extern struct {
     const Self = @This();
@@ -23,6 +26,15 @@ pub const MainWindow = extern struct {
         const window = gobject.ext.as(gtk.Window, self);
         window.setTitle("Rex4L");
         window.setDefaultSize(800, 600);
+
+        if (TerminalView.init(vt.TinyIo.init.io(), std.heap.page_allocator)) |view| {
+            window.setChild(view.widget());
+            view.feed("Rex4L terminal preview\r\nWaiting for a Rex connection.\r\n") catch |err| {
+                std.log.err("could not render terminal preview: {t}", .{err});
+            };
+        } else |err| {
+            std.log.err("could not create terminal view: {t}", .{err});
+        }
         return self;
     }
 

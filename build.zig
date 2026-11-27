@@ -25,6 +25,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
     addGTKToModule(b, mod, .{ .target = target, .optimize = optimize });
+    addGhosttyToModule(b, mod, .{ .target = target, .optimize = optimize });
 
     const exe = b.addExecutable(.{
         .name = "Rex4L",
@@ -81,6 +82,15 @@ fn addGTKToModule(b: *std.Build, mod: *std.Build.Module, opts: anytype) void {
         const name, const module = import;
         mod.addImport(name, gobject.module(module));
     }
+}
+
+fn addGhosttyToModule(b: *std.Build, mod: *std.Build.Module, opts: anytype) void {
+    const ghostty = b.dependency("ghostty", .{
+        .target = opts.target,
+        .optimize = opts.optimize,
+    });
+
+    mod.addImport("ghostty-vt", ghostty.module("ghostty-vt"));
 }
 
 fn registerTutorialTargets(
