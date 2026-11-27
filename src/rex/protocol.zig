@@ -1,6 +1,8 @@
 //! Rex control WebSocket messages for attaching to one existing terminal.
 //! Method payloads follow `rex api describe`; the control envelope follows
 //! https://github.com/a10y/rexrs/blob/main/src/protocol.rs.
+//! This is not from Superlogical because at the time of writing they did not
+//! publish anything officially.
 //! Socket I/O and the binary terminal data stream belong in separate modules.
 const std = @import("std");
 
@@ -81,12 +83,14 @@ pub const Incoming = union(enum) {
 pub fn decodeIncoming(alloc: std.mem.Allocator, text: []const u8) !std.json.Parsed(Incoming) {
     var parsed = try std.json.parseFromSlice(std.json.Value, alloc, text, .{ .allocate = .alloc_always });
     errdefer parsed.deinit();
+
     if (parsed.value != .object) return error.InvalidEnvelope;
     const kind = parsed.value.object.get("type") orelse return error.InvalidEnvelope;
     if (kind != .string) return error.InvalidEnvelope;
 
     const arena = parsed.arena.allocator();
     const options: std.json.ParseOptions = .{ .ignore_unknown_fields = true };
+
     const value: Incoming = if (std.mem.eql(u8, kind.string, "welcome"))
         .{ .welcome = try std.json.parseFromValueLeaky(Welcome, arena, parsed.value, options) }
     else if (std.mem.eql(u8, kind.string, "response"))
@@ -95,6 +99,7 @@ pub fn decodeIncoming(alloc: std.mem.Allocator, text: []const u8) !std.json.Pars
         .{ .event = try std.json.parseFromValueLeaky(Event, arena, parsed.value, options) }
     else
         .{ .unknown = kind.string };
+
     return .{ .arena = parsed.arena, .value = value };
 }
 

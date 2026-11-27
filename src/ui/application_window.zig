@@ -19,7 +19,8 @@ pub const MainWindow = extern struct {
         .name = "Rex4LMainWindow",
     });
 
-    pub fn new(app: *gtk.Application) *Self {
+    pub fn new(app: *gtk.Application, opts: struct { socket_path: []const u8 }) *Self {
+        _ = opts;
         const self = gobject.ext.newInstance(Self, .{
             .application = app,
         });
@@ -35,6 +36,7 @@ pub const MainWindow = extern struct {
         } else |err| {
             std.log.err("could not create terminal view: {t}", .{err});
         }
+
         return self;
     }
 
