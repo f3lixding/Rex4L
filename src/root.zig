@@ -4,3 +4,8 @@ const terminal = @import("terminal/root.zig");
 pub fn run() void {
     ui.run();
 }
+
+test {
+    _ = terminal.Emulator;
+    _ = @import("rex/protocol.zig");
+}

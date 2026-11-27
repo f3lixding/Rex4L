@@ -28,7 +28,7 @@ pub const MainWindow = extern struct {
         window.setDefaultSize(800, 600);
 
         if (TerminalView.init(vt.TinyIo.init.io(), std.heap.page_allocator)) |view| {
-            window.setChild(view.widget());
+            window.setChild(view.asWidget());
             view.feed("Rex4L terminal preview\r\nWaiting for a Rex connection.\r\n") catch |err| {
                 std.log.err("could not render terminal preview: {t}", .{err});
             };

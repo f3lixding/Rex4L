@@ -17,7 +17,8 @@ pub fn init(io: std.Io, alloc: std.mem.Allocator) !*Self {
     const self = try alloc.create(Self);
     errdefer alloc.destroy(self);
 
-    const emulator = try Emulator.init(io, alloc, .{ .cols = 80, .rows = 24 });
+    // TODO: expose the dimension
+    const emulator = try Emulator.initPreview(io, alloc, .{ .cols = 80, .rows = 24 });
     self.* = .{ .area = gtk.DrawingArea.new(), .emulator = emulator };
 
     // GTK owns this callback data once registered and passes it back to draw.
@@ -26,14 +27,14 @@ pub fn init(io: std.Io, alloc: std.mem.Allocator) !*Self {
     return self;
 }
 
-pub fn widget(self: *Self) *gtk.Widget {
+pub fn asWidget(self: *Self) *gtk.Widget {
     return self.area.as(gtk.Widget);
 }
 
 pub fn feed(self: *Self, bytes: []const u8) !void {
     self.emulator.feed(bytes);
     try self.emulator.updateRenderState(&self.render_state);
-    self.widget().queueDraw();
+    self.asWidget().queueDraw();
 }
 
 fn draw(_: *gtk.DrawingArea, cr: *cairo.Context, _: c_int, _: c_int, data: ?*anyopaque) callconv(.c) void {
