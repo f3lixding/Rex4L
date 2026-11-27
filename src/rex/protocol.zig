@@ -165,6 +165,13 @@ pub const View = struct {
         window_id: ?[]const u8,
         label: []const u8 = "",
         focused_block_id: ?[]const u8 = null,
+        layers: ?[]const Layer = null,
+    };
+
+    pub const Layer = struct { blocks: ?[]const Block = null };
+    pub const Block = struct {
+        block_id: ?[]const u8,
+        creator_name: []const u8 = "",
     };
 };
 

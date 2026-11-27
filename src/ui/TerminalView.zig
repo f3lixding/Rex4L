@@ -6,20 +6,25 @@ const cairo = @import("cairo");
 const gtk = @import("gtk");
 const vt = @import("ghostty-vt");
 const Emulator = @import("../terminal/root.zig").Emulator;
+const RunCtx = @import("RunCtx.zig");
 
 const Self = @This();
 
 area: *gtk.DrawingArea,
 emulator: Emulator,
 render_state: vt.RenderState = .empty,
+run_ctx: RunCtx,
 
-pub fn init(io: std.Io, alloc: std.mem.Allocator) !*Self {
+pub fn initFromSnapshot(io: std.Io, alloc: std.mem.Allocator, run_ctx: RunCtx, snapshot: []const u8) !*Self {
     const self = try alloc.create(Self);
     errdefer alloc.destroy(self);
 
-    // TODO: expose the dimension
-    const emulator = try Emulator.initPreview(io, alloc, .{ .cols = 80, .rows = 24 });
-    self.* = .{ .area = gtk.DrawingArea.new(), .emulator = emulator };
+    var emulator = try Emulator.initFromSnapshot(io, alloc, snapshot);
+    errdefer emulator.deinit();
+    var state: vt.RenderState = .empty;
+    errdefer state.deinit(alloc);
+    try emulator.updateRenderState(&state);
+    self.* = .{ .area = gtk.DrawingArea.new(), .emulator = emulator, .render_state = state, .run_ctx = run_ctx };
 
     // GTK owns this callback data once registered and passes it back to draw.
     // The drawing area calls destroy when it releases the callback.

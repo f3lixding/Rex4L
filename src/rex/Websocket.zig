@@ -84,6 +84,10 @@ pub fn sendText(self: *Self, text: []const u8) !void {
     try self.sendFrame(0x1, text);
 }
 
+pub fn sendBinary(self: *Self, bytes: []const u8) !void {
+    return self.sendFrame(0x2, bytes);
+}
+
 fn sendFrame(self: *Self, opcode: u8, bytes: []const u8) !void {
     const writer = &self.output.interface;
     var mask: [4]u8 = undefined;
@@ -103,9 +107,16 @@ fn sendFrame(self: *Self, opcode: u8, bytes: []const u8) !void {
     try writer.flush();
 }
 
-/// Receive one complete text message, including fragmented messages.
-/// The caller owns the returned buffer. Limit applies to the whole message.
 pub fn receiveText(self: *Self, alloc: Allocator, limit: usize) ![]u8 {
+    return self.receiveMessage(alloc, limit, 0x1);
+}
+
+pub fn receiveBinary(self: *Self, alloc: Allocator, limit: usize) ![]u8 {
+    return self.receiveMessage(alloc, limit, 0x2);
+}
+
+/// Receive one complete message, including any continuation frames.
+fn receiveMessage(self: *Self, alloc: Allocator, limit: usize, message_opcode: u8) ![]u8 {
     const reader = &self.input.interface;
     var message: std.ArrayList(u8) = .empty;
     defer message.deinit(alloc);
@@ -134,7 +145,7 @@ pub fn receiveText(self: *Self, alloc: Allocator, limit: usize) ![]u8 {
             }
             continue;
         }
-        if (opcode != @as(u8, if (fragmented) 0x0 else 0x1)) return error.InvalidWebSocketFrame;
+        if (opcode != (if (fragmented) @as(u8, 0) else message_opcode)) return error.InvalidWebSocketFrame;
         const len: u64 = switch (length_code) {
             126 => try reader.takeInt(u16, .big),
             127 => try reader.takeInt(u64, .big),
@@ -148,7 +159,7 @@ pub fn receiveText(self: *Self, alloc: Allocator, limit: usize) ![]u8 {
         try message.resize(alloc, start + @as(usize, @intCast(len)));
         try reader.readSliceAll(message.items[start..]);
         if (final) {
-            if (!std.unicode.utf8ValidateSlice(message.items)) return error.InvalidWebSocketText;
+            if (message_opcode == 0x1 and !std.unicode.utf8ValidateSlice(message.items)) return error.InvalidWebSocketText;
             return message.toOwnedSlice(alloc);
         }
         fragmented = true;
