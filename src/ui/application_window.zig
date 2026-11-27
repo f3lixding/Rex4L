@@ -19,8 +19,7 @@ pub const MainWindow = extern struct {
         .name = "Rex4LMainWindow",
     });
 
-    pub fn new(app: *gtk.Application, opts: struct { socket_path: []const u8 }) *Self {
-        _ = opts;
+    pub fn new(app: *gtk.Application) *Self {
         const self = gobject.ext.newInstance(Self, .{
             .application = app,
         });

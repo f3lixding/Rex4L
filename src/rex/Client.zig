@@ -9,19 +9,31 @@ const Allocator = std.mem.Allocator;
 const max_incoming_bytes = 16 * 1024 * 1024;
 
 alloc: Allocator,
-socket: WebSocket,
-welcome: std.json.Parsed(protocol.Incoming),
+socket: WebSocket = undefined,
+welcome: ?std.json.Parsed(protocol.Incoming) = null,
 next_id: u64 = 1,
 
-/// Connect to an explicit Unix socket path (not a unix:// URI).
+/// Allocate a disconnected client. This does not perform any I/O.
 /// The heap allocation keeps the socket's reader/writer buffers stationary.
-pub fn connect(io: std.Io, alloc: Allocator, path: []const u8) !*Self {
+pub fn init(alloc: Allocator) !*Self {
     const self = try alloc.create(Self);
-    errdefer alloc.destroy(self);
+    self.* = .{ .alloc = alloc };
+    return self;
+}
 
-    self.alloc = alloc;
-    self.next_id = 1;
+/// Convenience constructor for callers that want to connect immediately.
+pub fn connect(io: std.Io, alloc: Allocator, path: []const u8) !*Self {
+    const self = try init(alloc);
+    errdefer self.deinit();
+    try self.open(io, path);
+    return self;
+}
 
+/// Connect an initialized client to an explicit Unix socket path (not a unix:// URI).
+/// A failed attempt leaves the client disconnected.
+pub fn open(self: *Self, io: std.Io, path: []const u8) !void {
+    if (self.welcome != null) return error.AlreadyConnected;
+    const alloc = self.alloc;
     try self.socket.connect(io, path, protocol.control_path, protocol.control_subprotocol);
     errdefer self.socket.close();
 
@@ -39,25 +51,26 @@ pub fn connect(io: std.Io, alloc: Allocator, path: []const u8) !*Self {
     if (info.api_revision != 14) return error.UnsupportedRexRevision;
 
     self.welcome = message;
-
-    return self;
 }
 
 pub fn deinit(self: *Self) void {
     const alloc = self.alloc;
-    self.welcome.deinit();
-    self.socket.close();
+    if (self.welcome) |welcome| {
+        welcome.deinit();
+        self.socket.close();
+    }
     alloc.destroy(self);
 }
 
 pub fn send(self: *Self, comptime Method: type, params: Method.Params) !u64 {
+    const welcome = self.welcome orelse return error.NotConnected;
     const id = self.next_id;
     const next_id = std.math.add(u64, id, 1) catch return error.RequestIdExhausted;
     var id_buffer: [20]u8 = undefined;
     const id_text = try std.fmt.bufPrint(&id_buffer, "{d}", .{id});
     const bytes = try protocol.encodeRequest(self.alloc, Method, id_text, params);
     defer self.alloc.free(bytes);
-    if (bytes.len > self.welcome.value.welcome.limits.max_message_bytes) return error.RexRequestTooLarge;
+    if (bytes.len > welcome.value.welcome.limits.max_message_bytes) return error.RexRequestTooLarge;
     try self.socket.sendText(bytes);
     self.next_id = next_id;
 
@@ -65,7 +78,8 @@ pub fn send(self: *Self, comptime Method: type, params: Method.Params) !u64 {
 }
 
 pub fn receive(self: *Self) !std.json.Parsed(protocol.Incoming) {
-    return self.readMessage(@min(max_incoming_bytes, self.welcome.value.welcome.limits.max_message_bytes));
+    const welcome = self.welcome orelse return error.NotConnected;
+    return self.readMessage(@min(max_incoming_bytes, welcome.value.welcome.limits.max_message_bytes));
 }
 
 /// Convenience for a single outstanding request. Discards unsolicited events;
@@ -99,4 +113,12 @@ fn readMessage(self: *Self, limit: usize) !std.json.Parsed(protocol.Incoming) {
     defer self.alloc.free(bytes);
 
     return protocol.decodeIncoming(self.alloc, bytes);
+}
+
+test "client starts disconnected" {
+    const client = try init(std.testing.allocator);
+    defer client.deinit();
+
+    try std.testing.expectError(error.NotConnected, client.send(protocol.ServerVersion, .{}));
+    try std.testing.expectError(error.NotConnected, client.receive());
 }
